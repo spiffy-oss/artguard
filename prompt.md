@@ -14,37 +14,31 @@ AI Bill of Materials (AI BOM) for enterprise governance.
 
 ---
 
-## ARCHITECTURAL INSPIRATION
+## ARCHITECTURAL PRINCIPLES
 
-Draw directly from these three open-source projects when designing modules:
+Design the codebase around these patterns:
 
-### 1. AI-Forensicator (github.com/ACandeias/AI-Forensicator)
-**Borrow:** The `collectors/` + `analyzers/` split and `AbstractCollector` base class pattern.
-- Map `collectors/` → `artguard/parsers/` (one parser per artifact type)
-- Map `analyzers/` → `artguard/analyzers/` (one analyzer per detection layer)
-- Use the same SQLite + WAL pattern for the feedback corpus storage (`db.py`)
+### 1. Collector / Analyzer split
+- `artguard/parsers/` — one parser per artifact type (collectors)
+- `artguard/analyzers/` — one analyzer per detection layer
+- Use SQLite + WAL for the feedback corpus storage (`db.py`)
 - Use Rich for TUI/terminal output
-- Use the same `schema.py` / `dataclass` pattern for structured findings
-- Use the read-only principle: never modify source artifacts
+- Use `schema.py` / `dataclass` pattern for structured findings
+- Read-only principle: never modify source artifacts
 
-### 2. ClawShield (github.com/SleuthCo/clawshield-public)
-**Borrow:** The defense-in-depth layer architecture and YAML policy engine concept.
-- Map ClawShield's three layers (proxy / firewall / eBPF) → our three scan layers
-  (privacy posture / semantic instruction / static pattern)
-- Borrow the scanner interface pattern: each scanner gets `enabled`, `action`, confidence
-- Borrow the cross-layer event concept: findings from Layer 3 can elevate Layer 2 sensitivity
-- Use their SQLite audit log pattern for scan result persistence
-- Borrow the YAML policy config pattern for enterprise scan profiles
+### 2. Defense-in-depth layer architecture
+- Three scan layers: privacy posture / semantic instruction / static pattern
+- Scanner interface pattern: each scanner gets `enabled`, `action`, confidence
+- Cross-layer events: findings from Layer 3 can elevate Layer 2 sensitivity
+- SQLite audit log for scan result persistence
+- YAML policy configs for enterprise scan profiles
 
-### 3. aflock (github.com/aflock-ai/aflock)
-**Borrow:** The policy schema design and standards-alignment metadata structure.
-- The Trust Profile JSON schema should mirror `.aflock` policy file structure:
-  versioned, signed-ready, with `identity` + `grants` + `limits` analogues
-- Use their `materials` section concept for artifact provenance tracking in the Trust Profile
-- Borrow their compliance mapping field pattern (`iso42001_controls`, `nist_ai_rmf_categories`)
-  directly in our `governance_metadata` Trust Profile section
-- The Trust Profile should be designed to be cryptographically signable (include
-  `digest` field even if signing is Phase 2)
+### 3. Governance-ready policy schema
+- Trust Profile JSON: versioned, signed-ready, with `identity` + `grants` + `limits` sections
+- Artifact provenance tracking via `materials` section
+- Compliance mapping fields (`iso42001_controls`, `nist_ai_rmf_categories`)
+  in the `governance_metadata` Trust Profile section
+- Designed to be cryptographically signable (`digest` field, even if signing is Phase 2)
 
 ---
 
@@ -148,7 +142,7 @@ artguard = "artguard.cli:main"
 
 ### Step 2: Schema (`artguard/schema.py`)
 
-Use Python dataclasses. Mirror the aflock policy schema's field discipline — every field
+Use Python dataclasses. Maintain strict field discipline — every field
 named, typed, and documented. This schema becomes the published open spec.
 
 ```python
@@ -221,7 +215,7 @@ class GovernanceMetadata:
     schema_version: str = "1.0.0"
     scan_timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     scanner_version: str = "0.1.0"
-    artifact_digest: str = ""     # SHA256 of artifact content — signable (aflock pattern)
+    artifact_digest: str = ""     # SHA256 of artifact content — signable
     artifact_path: str = ""
     artifact_type: str = ""
     spdx_mapping: dict = field(default_factory=dict)
@@ -245,7 +239,7 @@ class TrustProfile:
 
 ### Step 3: Base classes
 
-**`artguard/parsers/base.py`** — AI-Forensicator AbstractCollector pattern:
+**`artguard/parsers/base.py`** — AbstractParser base class:
 ```python
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -283,7 +277,7 @@ class AbstractParser(ABC):
         ...
 ```
 
-**`artguard/analyzers/base.py`** — ClawShield scanner interface pattern:
+**`artguard/analyzers/base.py`** — AbstractAnalyzer base class:
 ```python
 from abc import ABC, abstractmethod
 from artguard.parsers.base import ParsedArtifact
@@ -321,7 +315,7 @@ This is the P0 differentiator. No competitor does this. Implement these detectio
   - FIRST_PARTY: matches artifact's own stated domain or documented integration targets
   - KNOWN_ANALYTICS: match against a hardcoded list of ~50 known analytics/tracking domains
     (google-analytics.com, mixpanel.com, amplitude.com, segment.io, hotjar.com,
-     posthog.com, heap.io, fullstory.com, datadog-browser-agent, sentry.io, etc.)
+     posthog.com, heap.io, fullstory.com, sentry.io, etc.)
   - UNKNOWN_THIRD_PARTY: any domain not in first-party or known-good list
 - Flag KNOWN_ANALYTICS as HIGH, UNKNOWN_THIRD_PARTY as MEDIUM
 
@@ -444,44 +438,44 @@ class ExternalScannerOrchestrator:
     Missing tools emit a warning, not an error.
     """
 
-    def run_malcontent(self, artifact_path: str) -> list[Finding]:
+    def run_yara_scanner(self, artifact_path: str) -> list[Finding]:
         """
-        Chainguard malcontent: 14,500+ YARA rules, capability risk scoring.
-        subprocess: malcontent analyze --format=json <path>
+        YARA-based capability risk scanning.
+        Invoke YARA scanner CLI: malcontent analyze --format=json <path>
         Map capability risk levels: CRITICAL→CRITICAL, HIGH→HIGH, MEDIUM→MEDIUM
         """
 
-    def run_guarddog(self, artifact_path: str) -> list[Finding]:
+    def run_heuristic_scanner(self, artifact_path: str) -> list[Finding]:
         """
-        Datadog GuardDog: Semgrep heuristics for novel malware in packages.
-        subprocess: guarddog pypi scan <path> --output-format=json
+        Semgrep-based heuristic malware detection for packages.
+        Invoke heuristic scanner CLI: guarddog pypi scan <path> --output-format=json
         Use for artifacts containing embedded package manifests.
         """
 
-    def check_malwarebazaar_hash(self, sha256: str) -> Optional[Finding]:
+    def check_malware_hash(self, sha256: str) -> Optional[Finding]:
         """
-        abuse.ch MalwareBazaar: free hash lookup, no upload, no sharing.
-        GET https://mb-api.abuse.ch/api/v1/ with query_hash
-        Returns HIGH finding if hash is in MalwareBazaar.
-        """
-
-    def check_virustotal_hash(self, sha256: str) -> Optional[Finding]:
-        """
-        VirusTotal: hash-only lookup (NEVER upload — privacy preserved).
-        Requires VIRUSTOTAL_API_KEY env var. Skip gracefully if not set.
-        Returns known_bad_xref finding if VT consensus is malicious.
+        Free hash lookup against known malware databases — no upload, no sharing.
+        Hash lookup via free malware database API
+        Returns HIGH finding if hash matches known malware.
         """
 
-    def check_abuseipdb(self, endpoints: list[str]) -> list[Finding]:
+    def check_hash_reputation(self, sha256: str) -> Optional[Finding]:
         """
-        AbuseIPDB: cross-reference extracted network endpoints.
-        Requires ABUSEIPDB_API_KEY env var. Skip gracefully if not set.
+        Hash-only reputation lookup (NEVER upload — privacy preserved).
+        Requires API key env var. Skip gracefully if not set.
+        Returns known_bad_xref finding if consensus is malicious.
+        """
+
+    def check_ip_reputation(self, endpoints: list[str]) -> list[Finding]:
+        """
+        Cross-reference extracted network endpoints against IP reputation feeds.
+        Requires API key env var. Skip gracefully if not set.
         Flag IPs with abuse confidence score > 50 as MEDIUM findings.
         """
 
     def check_osv_dependencies(self, deps: list[str]) -> list[Finding]:
         """
-        OSV / ossf/malicious-packages: check embedded dependencies.
+        OSV: check embedded dependencies against known malicious packages.
         POST https://api.osv.dev/v1/query for each dependency.
         Flag any matches against the malicious-packages dataset as HIGH.
         """
@@ -711,8 +705,8 @@ Used to validate false positive rate.
 ANTHROPIC_API_KEY=sk-ant-...          # Required for --deep (Layer 2)
 ARTGUARD_DB_PATH=~/.artguard/corpus.db
 ARTGUARD_SCAN_PROFILE=default
-VIRUSTOTAL_API_KEY=...                # Optional — skip gracefully if not set
-ABUSEIPDB_API_KEY=...                 # Optional — skip gracefully if not set
+HASH_REPUTATION_API_KEY=...           # Optional — skip gracefully if not set
+IP_REPUTATION_API_KEY=...             # Optional — skip gracefully if not set
 ```
 
 ---
@@ -730,7 +724,7 @@ ABUSEIPDB_API_KEY=...                 # Optional — skip gracefully if not set
 - [ ] Layer 3 has zero imports from Layer 1 or Layer 2 (extractable module test):
       `python -c "from artguard.analyzers.layer3_static import StaticPatternAnalyzer"`
 - [ ] `artguard stats` shows corpus statistics from SQLite DB
-- [ ] External scanners (malcontent, GuardDog) fail gracefully if not installed
+- [ ] External scanners fail gracefully if not installed
 
 ---
 

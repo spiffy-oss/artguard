@@ -86,25 +86,9 @@ artguard batch ./skills-directory/
 
 ## Architecture
 
-The prompt draws from three open source projects:
-
-- [AI-Forensicator](https://github.com/ACandeias/AI-Forensicator) —
-  collector/analyzer split, SQLite corpus, Rich TUI pattern
-- [ClawShield](https://github.com/SleuthCo/clawshield-public) —
-  defense-in-depth layer model, YAML policy engine
-- [aflock](https://github.com/aflock-ai/aflock) —
-  governance-ready policy schema, standards alignment fields
-
-Layer 3 wraps the best free/open-source scanners:
-
-| Scanner | What it adds |
-|---|---|
-| [malcontent](https://github.com/chainguard-dev/malcontent) (Chainguard) | 14,500+ YARA rules, capability risk scoring |
-| [GuardDog](https://github.com/DataDog/guarddog) (Datadog) | Semgrep heuristics for novel malware |
-| [ossf/malicious-packages](https://github.com/ossf/malicious-packages) | Community ground truth in OSV format |
-| MalwareBazaar | Hash lookups, no rate limits for researchers |
-| AbuseIPDB | IP reputation cross-reference |
-| VirusTotal | Hash-only lookup (never uploads — privacy preserved) |
+Layer 3 integrates YARA rules, heuristic engines, hash lookups, and
+IP reputation feeds from the best available open-source and free-tier
+sources — so you get broad coverage without vendor lock-in.
 
 ## Project structure (what Claude Code generates)
 
