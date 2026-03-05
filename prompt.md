@@ -440,15 +440,15 @@ class ExternalScannerOrchestrator:
 
     def run_yara_scanner(self, artifact_path: str) -> list[Finding]:
         """
-        YARA-based capability risk scanning.
-        Invoke YARA scanner CLI: malcontent analyze --format=json <path>
+        YARA-based capability risk scanning via subprocess.
+        Invoke an available YARA scanner CLI, parse JSON output.
         Map capability risk levels: CRITICAL→CRITICAL, HIGH→HIGH, MEDIUM→MEDIUM
         """
 
     def run_heuristic_scanner(self, artifact_path: str) -> list[Finding]:
         """
-        Semgrep-based heuristic malware detection for packages.
-        Invoke heuristic scanner CLI: guarddog pypi scan <path> --output-format=json
+        Heuristic malware detection for packages via subprocess.
+        Invoke an available package-scanning CLI, parse JSON output.
         Use for artifacts containing embedded package manifests.
         """
 
